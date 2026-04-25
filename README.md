@@ -41,13 +41,13 @@ pub fn build(b: *std.Build) void {
 ```zig
 const zort = @import("zort");
 
-fn asc(a: u8, b: u8) bool {
+fn asc(_: void, a: u8, b: u8) bool {
     return a < b;
 }
 
 pub fn main() !void {
     var arr = [_]u8{ 9, 1, 4, 12, 3, 4 };
-    try zort.quickSort(u8, &arr, asc);
+    try zort.quickSort(u8, &arr, {}, asc);
 }
 ```
 

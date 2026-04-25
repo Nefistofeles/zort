@@ -1,5 +1,7 @@
 const std = @import("std");
+
 const zort = @import("zort");
+
 const gen = @import("generator.zig");
 
 const INPUT_ITEMS = 10_000_000;
@@ -15,15 +17,12 @@ const BenchResult = struct {
     flavor: []const u8,
 };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // initialize the allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
+    const allocator = init.gpa;
 
     // parse arguments
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len < 2) {
         std.debug.print("no algorithm(s) specified\nexiting...\n", .{});
@@ -31,8 +30,8 @@ pub fn main() !void {
     }
 
     // prepare array for storing benchmark results
-    var results = std.ArrayList(BenchResult).init(allocator);
-    defer results.deinit();
+    var results = std.ArrayList(BenchResult).empty;
+    defer results.deinit(allocator);
 
     inline for (TYPES) |tp| {
         inline for (FLAVORS) |flavor| {
@@ -48,24 +47,24 @@ pub fn main() !void {
                 "Generating {s} data ({d} items of {s})... ",
                 .{ flavor_name, INPUT_ITEMS, @typeName(tp) },
             );
-            const arr = try @call(.auto, flavor, .{ tp, allocator, INPUT_ITEMS });
+            const arr = try @call(.auto, flavor, .{ tp, init.io, allocator, INPUT_ITEMS });
             defer allocator.free(arr);
             std.debug.print("Done. ", .{});
 
             for (args[1..]) |arg| {
                 std.debug.print("\nStarting {s} sort...", .{arg});
-                var res = try runIterations(tp, allocator, arg, arr);
+                var res = try runIterations(tp, init.io, allocator, arg, arr);
                 res.command = arg;
                 res.tp = @typeName(tp);
                 res.flavor = flavor_name;
-                try results.append(res);
+                try results.append(allocator, res);
             }
 
             std.debug.print("\n", .{});
         }
     }
 
-    try writeMermaid(results);
+    try writeMermaid(allocator, init.io, results);
 }
 
 fn checkSorted(
@@ -83,8 +82,9 @@ fn checkSorted(
 
 fn runIterations(
     comptime T: type,
+    io: std.Io,
     allocator: std.mem.Allocator,
-    arg: [:0]u8,
+    arg: [:0]const u8,
     arr: []T,
 ) !BenchResult {
     var result: BenchResult = undefined;
@@ -96,57 +96,66 @@ fn runIterations(
         defer allocator.free(items);
 
         if (std.mem.eql(u8, arg, "bubble"))
-            result.times[i] = try bench(zort.bubbleSort, .{ T, items, {}, comptime std.sort.asc(T) })
+            result.times[i] = try bench(io, zort.bubbleSort, .{ T, items, {}, comptime std.sort.asc(T) })
         else if (std.mem.eql(u8, arg, "quick"))
-            result.times[i] = try bench(zort.quickSort, .{ T, items, {}, comptime std.sort.asc(T) })
+            result.times[i] = try bench(io, zort.quickSort, .{ T, items, {}, comptime std.sort.asc(T) })
         else if (std.mem.eql(u8, arg, "selection"))
-            result.times[i] = try bench(zort.selectionSort, .{ T, items, {}, comptime std.sort.asc(T) })
+            result.times[i] = try bench(io, zort.selectionSort, .{ T, items, {}, comptime std.sort.asc(T) })
         else if (std.mem.eql(u8, arg, "comb"))
-            result.times[i] = try bench(zort.combSort, .{ T, items, {}, comptime std.sort.asc(T) })
+            result.times[i] = try bench(io, zort.combSort, .{ T, items, {}, comptime std.sort.asc(T) })
         else if (std.mem.eql(u8, arg, "shell"))
-            result.times[i] = try bench(zort.shellSort, .{ T, items, {}, comptime std.sort.asc(T) })
+            result.times[i] = try bench(io, zort.shellSort, .{ T, items, {}, comptime std.sort.asc(T) })
         else if (std.mem.eql(u8, arg, "merge"))
             result.times[i] = try errbench(
+                io,
                 zort.mergeSort,
                 .{ T, allocator, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "radix")) {
             result.times[i] = try errbench(
+                io,
                 zort.radixSort,
                 .{ T, zort.SortOptions{}, allocator, items },
             );
         } else if (std.mem.eql(u8, arg, "tim"))
             result.times[i] = try errbench(
+                io,
                 zort.timSort,
                 .{ T, allocator, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "tail"))
             result.times[i] = try errbench(
+                io,
                 zort.tailSort,
                 .{ T, allocator, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "twin"))
             result.times[i] = try errbench(
+                io,
                 zort.twinSort,
                 .{ T, allocator, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "std_block"))
             result.times[i] = try bench(
+                io,
                 std.sort.block,
                 .{ T, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "std_pdq"))
             result.times[i] = try bench(
+                io,
                 std.sort.pdq,
                 .{ T, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "std_heap"))
             result.times[i] = try bench(
+                io,
                 std.sort.heap,
                 .{ T, items, {}, comptime std.sort.asc(T) },
             )
         else if (std.mem.eql(u8, arg, "std_insertion"))
             result.times[i] = try bench(
+                io,
                 std.sort.insertion,
                 .{ T, items, {}, comptime std.sort.asc(T) },
             )
@@ -173,20 +182,23 @@ fn runIterations(
     return result;
 }
 
-fn bench(func: anytype, args: anytype) anyerror!u64 {
-    var timer = try std.time.Timer.start();
+fn bench(io: std.Io, func: anytype, args: anytype) !u64 {
+    var timer = std.Io.Clock.awake.now(io);
     @call(.auto, func, args);
-    return timer.read() / std.time.ns_per_ms;
+    return @intCast(timer.untilNow(io, .awake).toMilliseconds());
 }
 
-fn errbench(func: anytype, args: anytype) anyerror!u64 {
-    var timer = try std.time.Timer.start();
+fn errbench(io: std.Io, func: anytype, args: anytype) !u64 {
+    var timer = std.Io.Clock.awake.now(io);
     try @call(.auto, func, args);
-    return timer.read() / std.time.ns_per_ms;
+    return @intCast(timer.untilNow(io, .awake).toMilliseconds());
 }
 
-fn writeMermaid(results: std.ArrayList(BenchResult)) !void {
-    const stdout = std.io.getStdOut().writer();
+fn writeMermaid(allocator: std.mem.Allocator, io: std.Io, results: std.ArrayList(BenchResult)) !void {
+    var buffer = try allocator.alloc(u8, 1024 * 8);
+    var stdout_raw = std.Io.File.stdout().writer(io, buffer[0..]);
+
+    var stdout = stdout_raw.interface;
 
     var curr_type: []const u8 = "";
     var curr_flavor: []const u8 = "";
@@ -227,4 +239,7 @@ fn writeMermaid(results: std.ArrayList(BenchResult)) !void {
     }
 
     _ = try stdout.write("```\n");
+
+    try stdout_raw.flush();
+    allocator.free(buffer);
 }

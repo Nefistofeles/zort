@@ -765,7 +765,7 @@ test "timSort" {
         const TESTS = 10;
         const ITEMS = 10_000;
 
-        var rnd = std.Random.DefaultPrng.init(@intCast(std.time.milliTimestamp()));
+        var rnd = std.Random.DefaultPrng.init(@intCast(std.Io.Clock.now(.real, std.testing.io).toMicroseconds()));
 
         var tc: usize = 0;
         while (tc < TESTS) : (tc += 1) {
@@ -794,7 +794,7 @@ test "timSort" {
         const TESTS = 10;
         const ITEMS = 10_000;
 
-        var rnd = std.Random.DefaultPrng.init(@intCast(std.time.milliTimestamp()));
+        var rnd = std.Random.DefaultPrng.init(@intCast(std.Io.Clock.now(.real, std.testing.io).toMicroseconds()));
 
         var tc: usize = 0;
         while (tc < TESTS) : (tc += 1) {
