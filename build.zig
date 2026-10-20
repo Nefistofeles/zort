@@ -19,9 +19,7 @@ pub fn build(b: *std.Build) !void {
     bench.root_module.addImport("zort", zort_module);
 
     const bench_cmd = b.addRunArtifact(bench);
-    if (b.args) |args| {
-        bench_cmd.addArgs(args);
-    }
+    bench_cmd.addPassthruArgs();
     const bench_step = b.step("bench", "Run benchmarks");
     bench_step.dependOn(&bench_cmd.step);
 

@@ -94,7 +94,7 @@ inline fn readOneByte(comptime T: type, comptime options: SortOptions, comptime 
     if (T == f64) {
         return readOneByte(u64, .{}, idx, @bitCast(x));
     }
-    const U = comptime std.meta.Int(.unsigned, @bitSizeOf(T));
+    const U = @Int(.unsigned, @bitSizeOf(T));
     const shift = comptime (@sizeOf(T) - 1 - idx) * 8;
     if (idx == 0) {
         return truncate(
@@ -116,7 +116,7 @@ inline fn readTwoBytes(comptime T: type, comptime options: SortOptions, comptime
     if (T == f64) {
         return readTwoBytes(u64, .{}, idx, @bitCast(x));
     }
-    const U = comptime std.meta.Int(.unsigned, @bitSizeOf(T));
+    const U = @Int(.unsigned, @bitSizeOf(T));
     const shift = comptime (@sizeOf(T) - 2 - idx) * 8;
     if (idx == 0) {
         return truncate(
